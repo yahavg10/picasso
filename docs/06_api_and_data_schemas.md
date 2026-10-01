@@ -2,13 +2,13 @@
 
 ## 1. Overview
 
-This document specifies the inter-service communication contracts connecting the **Golang Scanner**, **Python Agent Layer**, and the **Web Visualizer Canvas**.
+This document specifies the data models, Protobuf definitions, and diagram serialization schemas connecting the **Golang Scanner** and the **Python Agent & Exporter Layer**.
 
 ---
 
 ## 2. Protobuf / gRPC Interface (`picasso.proto`)
 
-The Go scanner exposes a gRPC streaming service used by the Python agent layer:
+The Go scanner can either run as a standalone CLI outputting a normalized JSON topology, or as a persistent gRPC service streaming directly to the Python reasoner:
 
 ```protobuf
 syntax = "proto3";
@@ -18,10 +18,10 @@ package picasso.v1;
 option go_package = "github.com/yahavg10/picasso/pkg/api/v1;picassov1";
 
 service PicassoScannerService {
-  // Streams discovered resources as they are fetched from AWS
+  // Streams discovered resources as they are discovered
   rpc StreamScan(ScanRequest) returns (stream ResourceEvent);
 
-  // Initiates a full scan and returns the complete topology graph
+  // Runs full scan and returns the complete graph snapshot
   rpc RunFullScan(ScanRequest) returns (ScanResponse);
 }
 
@@ -60,7 +60,7 @@ message ResourceNode {
 message RelationshipEdge {
   string source_arn = 1;
   string target_arn = 2;
-  string relationship = 3; // e.g. "CONTAINS", "ROUTES_TO", "ATTACHED_TO"
+  string relationship = 3; // e.g. "CONTAINS", "ROUTES_TO", "ATTACHED_TO", "ASSUMES_ROLE"
 }
 
 message ScanResponse {
@@ -73,81 +73,83 @@ message ScanResponse {
 
 ---
 
-## 3. Python Agent REST & WebSocket API
+## 3. Excalidraw Element Schema (Python Model)
 
-The Python orchestrator (`picasso-agent-core`) exposes endpoints for the frontend:
+```python
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field
 
-### REST Endpoints
-- `POST /api/v1/scan/start`
-  - Body: `{ "account_id": "...", "regions": ["us-east-1", "eu-west-1"] }`
-  - Response: `{ "scan_id": "scan_abc123", "status": "RUNNING" }`
-- `GET /api/v1/scan/:scan_id/report`
-  - Response: Returns full `AnalysisReport` with risk scores and findings.
-- `POST /api/v1/remediate/generate-diff`
-  - Body: `{ "finding_id": "FW-001", "format": "terraform" }`
-  - Response: `{ "diff": "...", "target_file": "security_groups.tf" }`
+class ExcalidrawElement(BaseModel):
+    id: str
+    type: Literal["rectangle", "text", "arrow", "line", "ellipse"]
+    x: float
+    y: float
+    width: float
+    height: float
+    angle: float = 0.0
+    strokeColor: str = "#000000"
+    backgroundColor: str = "transparent"
+    fillStyle: Literal["solid", "hachure", "cross-hatch"] = "solid"
+    strokeWidth: int = 1
+    strokeStyle: Literal["solid", "dashed", "dotted"] = "solid"
+    roughness: int = 1
+    opacity: int = 100
+    groupIds: List[str] = Field(default_factory=list)
+    roundness: Optional[dict] = None
+    text: Optional[str] = None
+    fontSize: Optional[int] = 16
+    fontFamily: int = 1
 
-### WebSocket Live Stream
-- `WS /api/v1/scan/:scan_id/live`
-  - Streams canvas graph mutations directly to the frontend.
-  - Payloads:
-    ```json
-    {
-      "type": "NODE_ADDED",
-      "node": {
-        "id": "arn:aws:ec2:us-east-1:123456789012:instance/i-0a1b2c3d4e",
-        "type": "compute",
-        "data": {
-          "label": "Web-Server-01",
-          "ip": "54.210.12.34",
-          "severity": "CRITICAL",
-          "findings_count": 2
-        },
-        "parentNode": "subnet-0123456789abcdef0"
-      }
-    }
-    ```
+class ExcalidrawDocument(BaseModel):
+    type: str = "excalidraw"
+    version: int = 2
+    source: str = "picasso"
+    elements: List[ExcalidrawElement]
+    appState: dict = Field(default_factory=lambda: {
+        "viewBackgroundColor": "#1e1e1e",
+        "gridSize": 20
+    })
+```
 
 ---
 
-## 4. Visual Canvas Schema (React Flow Format)
+## 4. Draw.io mxGraph Cell Schema
+
+```python
+from typing import Optional
+from pydantic import BaseModel
+
+class DrawioCell(BaseModel):
+    id: str
+    value: str
+    style: str
+    parent: str = "1"
+    vertex: Optional[str] = "1"
+    edge: Optional[str] = None
+    source: Optional[str] = None
+    target: Optional[str] = None
+    x: Optional[float] = 0.0
+    y: Optional[float] = 0.0
+    width: Optional[float] = 100.0
+    height: Optional[float] = 50.0
+```
+
+---
+
+## 5. Security Finding Schema (`findings.json`)
 
 ```json
 {
-  "canvas": {
-    "nodes": [
-      {
-        "id": "vpc-0123456789",
-        "type": "vpcContainer",
-        "position": { "x": 100, "y": 100 },
-        "data": {
-          "label": "Production VPC",
-          "cidr": "10.0.0.0/16"
-        },
-        "style": { "width": 800, "height": 600 }
-      },
-      {
-        "id": "subnet-public-1",
-        "type": "subnetContainer",
-        "parentNode": "vpc-0123456789",
-        "position": { "x": 50, "y": 80 },
-        "data": {
-          "label": "Public Subnet us-east-1a",
-          "tier": "PUBLIC",
-          "cidr": "10.0.1.0/24"
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "edge-igw-to-subnet",
-        "source": "igw-0123456789",
-        "target": "subnet-public-1",
-        "animated": true,
-        "style": { "stroke": "#ef4444", "strokeWidth": 2 },
-        "data": { "threat": "Internet Ingress Route" }
-      }
-    ]
+  "finding_id": "FW-001",
+  "category": "FIREWALL",
+  "severity": "CRITICAL",
+  "title": "Unrestricted SSH Ingress",
+  "resource_arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0123456789abcdef0",
+  "remediation": "Restrict port 22 ingress to corporate CIDRs or enable AWS Systems Manager Session Manager.",
+  "visual_cue": {
+    "target_element_id": "sg-0123456789abcdef0",
+    "highlight_color": "#dc2626",
+    "badge_text": "CRITICAL: Port 22 Open"
   }
 }
 ```

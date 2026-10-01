@@ -1,87 +1,118 @@
-# 04 - Live Drawing, Visual Synthesis & Interactive Canvas Engine
+# 04 - Excalidraw & Draw.io Diagram Synthesis Engine
 
-## 1. Objectives & User Experience
+## 1. Overview
 
-The visualization layer translates complex, multidimensional AWS topologies into an intuitive, live interactive canvas. Rather than static diagrams, Picasso renders a **dynamic living map** that updates in real time as the Go scanner processes accounts and regions.
+Rather than requiring a custom web frontend, Picasso directly synthesizes native **`.excalidraw`** and **`.drawio`** diagram files. This enables immediate visualization, editing, and sharing in standard design and developer tools.
 
 ---
 
-## 2. Visual Layout Architecture
+## 2. Excalidraw Generation Engine (`.excalidraw`)
 
+Excalidraw files are structured JSON documents adhering to the Excalidraw schema (version 2). The Python generator constructs an array of visual elements (`elements`), binding text labels and arrow connectors together.
+
+### Element Architecture
 ```
-                    ┌──────────────────────────────────────────────┐
-                    │               Account Boundary               │
-  ┌─────────────────┴──────────────────────────────────────────────┴──────────────────┐
-  │ Region: us-east-1                                                                 │
-  │                                                                                   │
-  │  ┌──────────────────────── VPC (10.0.0.0/16) ──────────────────────────────────┐  │
-  │  │                                                                             │  │
-  │  │   [Internet Gateway]                                                        │  │
-  │  │            │                                                                │  │
-  │  │   ┌────────▼────────────────────────┐ ┌───────────────────────────────────┐ │  │
-  │  │   │ Public Subnet (10.0.1.0/24)     │ │ Private Subnet (10.0.2.0/24)     │ │  │
-  │  │   │                                 │ │                                   │ │  │
-  │  │   │  [ALB: Internet-Facing]         │ │  [RDS: MySQL Instance]            │ │  │
-  │  │   │     ▲                           │ │     ▲                             │ │  │
-  │  │   │     │ (Port 80/443)             │ │     │ (Port 3306)                 │ │  │
-  │  │   │     │                           │ │     │                             │ │  │
-  │  │   │  [EC2: Web Server] ─────────────┼─┼─────┘ (App Traffic)               │ │  │
-  │  │   │   ⚠ Ingress 0.0.0.0/0:22 (SSH)  │ │                                   │ │  │
-  │  │   └─────────────────────────────────┘ └───────────────────────────────────┘ │  │
-  │  └─────────────────────────────────────────────────────────────────────────────┘  │
-  └───────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│ Excalidraw File Structure                              │
+│                                                        │
+│  {                                                     │
+│    "type": "excalidraw",                               │
+│    "version": 2,                                       │
+│    "source": "picasso-scanner",                        │
+│    "elements": [                                       │
+│      /* Account Boundary Rectangle */                  │
+│      /* VPC Container Rectangle (dashed) */            │
+│      /* Subnet Rectangles (solid / tinted) */          │
+│      /* Workload Nodes (EC2, RDS, Lambda) */           │
+│      /* Risk Callout Badges (Red / Orange) */          │
+│      /* Attack Path Arrows (Animated / Red) */         │
+│    ],                                                  │
+│    "appState": { "viewBackgroundColor": "#1e1e1e" }    │
+│  }                                                     │
+└────────────────────────────────────────────────────────┘
+```
+
+### Visual Styling in Excalidraw
+- **VPC Containers**: Large rectangular boundaries with `roughness: 1`, `strokeColor: "#4a5568"`, `fillStyle: "solid"`, `backgroundColor: "transparent"`.
+- **Public Subnets**: Light-tinted yellow/red background (`#fff5f5` or dark-mode equivalent `#2d1515`).
+- **Private Subnets**: Calm blue/green tint (`#f0fff4` or dark-mode `#14291e`).
+- **Critical Risk Nodes**:
+  - `strokeColor`: `"#e53e3e"` (Red)
+  - `strokeWidth`: `2`
+  - Floating threat badge text element: `"[!] 0.0.0.0/0:22 Open to Internet"`
+- **Attack Paths**:
+  - `type`: `"arrow"`
+  - `strokeColor`: `"#e53e3e"`
+  - `strokeStyle`: `"dashed"`
+  - `strokeWidth`: `3`
+
+---
+
+## 3. Draw.io Generation Engine (`.drawio`)
+
+Draw.io (diagrams.net) files are XML documents utilizing the **mxGraph** model. Draw.io natively supports **collapsible parent-child container groups**, making it ideal for deeply nested cloud architectures.
+
+### XML mxGraph Hierarchy
+```xml
+<mxfile host="Picasso" modified="2026-10-02T00:00:00Z" agent="Picasso-Engine">
+  <diagram id="aws-topology" name="AWS Security Topology">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1">
+      <root>
+        <!-- Canvas Root Cells -->
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- VPC Container (Collapsible Group) -->
+        <mxCell id="vpc-01" value="VPC: Production (10.0.0.0/16)" 
+                style="swimlane;whiteSpace=wrap;html=1;startSize=26;fillColor=#f8fafc;strokeColor=#64748b;rounded=1;" 
+                vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="700" height="480" as="geometry"/>
+        </mxCell>
+
+        <!-- Public Subnet Container inside VPC -->
+        <mxCell id="sub-01" value="Public Subnet (10.0.1.0/24) [us-east-1a]" 
+                style="swimlane;whiteSpace=wrap;html=1;startSize=24;fillColor=#fef2f2;strokeColor=#ef4444;rounded=1;" 
+                vertex="1" parent="vpc-01">
+          <mxGeometry x="30" y="50" width="300" height="380" as="geometry"/>
+        </mxCell>
+
+        <!-- Workload inside Subnet -->
+        <mxCell id="ec2-01" value="&lt;b&gt;Web-Server-01&lt;/b&gt;&lt;br&gt;i-0a1b2c3d4e&lt;br&gt;&lt;font color='#ef4444'&gt;⚠ Ingress 0.0.0.0/0:22&lt;/font&gt;" 
+                style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;strokeWidth=2;" 
+                vertex="1" parent="sub-01">
+          <mxGeometry x="30" y="60" width="240" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- Attack Path Connector -->
+        <mxCell id="edge-01" value="Exploitable Ingress" 
+                style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ef4444;strokeWidth=3;dashed=1;" 
+                edge="1" parent="1" source="igw-01" target="ec2-01">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
 ```
 
 ---
 
-## 3. Hierarchical Nesting & Layout Algorithm
+## 4. Automated Grid & Layout Engine (Python)
 
-To prevent the visual chaos common in cloud diagrams ("spaghetti graphs"), Picasso uses a **hierarchical box-in-box nesting algorithm** paired with **Dagre / Elk layout engines**:
+To ensure generated diagrams look organized without overlapping shapes, Picasso implements a **hierarchical bounding box layout engine**:
 
-### Nesting Levels:
-1. **Level 0 (Root)**: AWS Organization / Cloud Provider
-2. **Level 1 (Accounts)**: AWS Account boundary (`123456789012`)
-3. **Level 2 (Regions)**: Regional boundaries (`us-east-1`, `eu-central-1`)
-4. **Level 3 (VPCs)**: Virtual Private Clouds (`vpc-xxxx`)
-5. **Level 4 (Availability Zones & Subnets)**:
-   - Tiered vertically: Public Subnets (top) $\rightarrow$ Private App Subnets (middle) $\rightarrow$ Isolated DB Subnets (bottom).
-6. **Level 5 (Workloads & Endpoints)**:
-   - EC2, ECS, Lambda, RDS, S3 Gateway Endpoints, ENIs.
+1. **Subnet Sizing**: Computes required width and height based on the number of compute and datastore nodes inside the subnet.
+2. **VPC Sizing**: Aligns subnets side-by-side or in multi-tier rows (Public tier on top, Private App in middle, Database tier on bottom) with standard 30px padding.
+3. **Region / Account Sizing**: Surrounds VPCs with regional boundary frames.
+4. **Router & Gateway Alignment**: Positions Internet Gateways, NAT Gateways, and Transit Gateways at perimeter entry/exit coordinates.
 
 ---
 
-## 4. Visual Threat Modeling Cues
+## 5. How to View and Edit Generated Files
 
-Picasso uses explicit visual cues to communicate risk instantly without reading long audit reports:
-
-| Visual Element | Representation | Meaning |
+| File Extension | Native Mac / VS Code Viewer | Web Viewer |
 | :--- | :--- | :--- |
-| **Node Border Color** | 🔴 Red Glowing Border | **Critical Risk**: Direct internet exposure, root key, or active privilege escalation. |
-| **Node Border Color** | 🟠 Orange Border | **High Risk**: Missing encryption, open management port, or disabled logs. |
-| **Node Border Color** | 🟢 Green Border | **Healthy**: Configured according to CIS AWS benchmarks. |
-| **Edge Styling** | ─── Solid Blue Arrow | Normal authorized network/trust relationship. |
-| **Edge Styling** | ╌╌╌ Animated Pulsing Red | **Active Attack Path**: Traversible vector from internet to internal asset. |
-| **Badges** | Floating Pill Icon `[ ⚠ 3 Risks ]` | Number of security findings on the given node. |
+| **`.excalidraw`** | **VS Code Excalidraw Extension** (by pomdtr) | **[excalidraw.com](https://excalidraw.com)** (drag & drop) |
+| **`.drawio`** | **Draw.io Integration Extension** (by Henning Dieterichs) | **[app.diagrams.net](https://app.diagrams.net)** |
 
----
-
-## 5. Frontend Canvas Implementation (React Flow)
-
-The canvas is implemented in **React Flow** (or **Excalidraw**) with custom node types:
-
-### Node Types
-- `AccountNode`: Parent boundary container with account metadata.
-- `VpcContainerNode`: Sub-canvas container showing VPC CIDR and attached IGWs.
-- `SubnetContainerNode`: Styled container (tinted green for private, tinted yellow/red for public).
-- `ComputeNode`: Custom component for EC2/ECS/Lambda with OS icon, attached IAM role badge, and IP tags.
-- `DatabaseNode`: Custom component for RDS/DynamoDB with encryption status and engine logo.
-- `SecurityGroupOverlay`: Semi-transparent perimeter boundary around instances sharing the same SG.
-
-### Interactive Features
-- **Real-Time Streaming**: As the Go scanner discovers a VPC or subnet, the node animates into view via WebSocket events.
-- **Node Drill-Down Drawer**: Clicking any node opens a right-side drawer showing:
-  - Raw AWS JSON configuration.
-  - Active Security Findings from the Python reasoning agents.
-  - Blast Radius Map (what this node can access).
-  - Remediation Action Button ("Generate Terraform Diff").
-- **Threat Filter Toggle**: Users can toggle between "Full Architecture View" and "Attack Surface Only View" (hides safe internal nodes).
+Both files are saved directly to the project output directory (e.g. `./output/aws_topology.excalidraw` and `./output/aws_topology.drawio`) and can be committed directly to Git.
