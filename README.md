@@ -1,20 +1,36 @@
 # Picasso 🎨
-### AI-Powered AWS Infrastructure Scanner & Live Security Topology Engine
+### AI-Augmented Cloud Security Engine & Live Architecture Visualizer
 
-**Picasso** is an intelligent cloud discovery, threat modeling, and visualization tool. It combines a **high-concurrency Go scanning engine** with a **Python multi-agent AI reasoning layer** to analyze an AWS environment—evaluating control plane risks, VPC network isolation, firewall misconfigurations, and IAM blast radii—and **directly generates native `.excalidraw` and `.drawio` diagram files** alongside actionable remediation diffs.
+**Picasso** is a zero-cloud-cost, production-grade cloud security platform designed for modern **DevSecOps** and **Security Software Engineering** workflows. It couples a **high-concurrency Go scanning engine** with a **deterministic graph solver and Python AI agent layer** to detect critical multi-hop attack paths across AWS architectures—running entirely offline against **LocalStack on local Kubernetes**.
 
-> [!NOTE]
-> **Zero-Frontend Required**: Picasso is a headless CLI pipeline. Visualizations are saved directly as `.excalidraw` and `.drawio` files, which open natively in [Excalidraw](https://excalidraw.com), [Draw.io / diagrams.net](https://app.diagrams.net), or your favorite VS Code diagramming extensions.
+Instead of requiring a web UI, Picasso generates native **`.excalidraw`** and **`.drawio`** files, accompanied by **SARIF** reports (for GitHub's Security tab), **ASFF** findings (for AWS Security Hub), and actionable **Terraform remediation diffs**.
+
+---
+
+## ⚡ The 1-Click Offline Demo
+
+Picasso runs **100% offline** with zero AWS bill by orchestrating LocalStack on local Kubernetes (`Kind` / `Minikube`):
+
+```bash
+# 🚀 Starts LocalStack on K8s, provisions a vulnerable AWS architecture,
+# scans it with Go, reasons with Python AI agents, and outputs diagrams:
+make demo
+```
+
+### Generated Artifacts:
+- 🎨 **`output/topology.excalidraw`**: Hand-drawn visual architecture with threat badges and attack paths.
+- 📐 **`output/architecture.drawio`**: Interactive diagram with collapsible VPC/subnet swimlanes for [Draw.io / diagrams.net](https://app.diagrams.net).
+- 📋 **`output/picasso.sarif`**: Industry-standard SARIF report for GitHub Code Scanning / Security alerts.
+- 🛡️ **`output/security_report.md`**: Executive risk summary with MITRE ATT&CK for Cloud mappings.
+- 🔧 **`output/remediations.tf`**: Automated Terraform HCL patches fixing detected misconfigurations.
 
 ---
 
 ## 📚 Architectural Design Specifications
 
-The project architecture is fully documented within the [`docs/`](./docs) directory:
-
 | Document | Focus | Core Technologies |
 | :--- | :--- | :--- |
-| [**00 - System Overview & Polyglot Architecture**](./docs/00_system_overview.md) | High-level system design, Go vs. Python role split, zero-frontend pipeline | Go, Python, gRPC/Pipes |
+| [**00 - System Overview & Architecture**](./docs/00_system_overview.md) | High-level system design, Go vs. Python role split, zero-cloud LocalStack | Go, Python, LocalStack, Kubernetes |
 | [**01 - Scanner Engine (Golang)**](./docs/01_scanner_engine_golang.md) | High-throughput, token-bucket rate-limited concurrent AWS discovery | Go 1.23+, `aws-sdk-go-v2`, Goroutines |
 | [**02 - Agent Intelligence Layer (Python)**](./docs/02_agent_intelligence_python.md) | Multi-agent orchestration, LangGraph state machine, specialized agents | Python 3.12+, LangGraph, Gemini API |
 | [**03 - Security Threat Models & Rules**](./docs/03_security_threat_model_and_rules.md) | Control plane, VPC, Firewall, and IAM privilege escalation heuristics | CIS AWS Benchmark, MITRE ATT&CK Cloud |
@@ -25,28 +41,34 @@ The project architecture is fully documented within the [`docs/`](./docs) direct
 
 ---
 
-## ⚡ The Headless Pipeline: Go + Python
+## 🧠 Deep-Dive Engineering Guides (Concepts Hard to Catch)
 
-```
-[Target AWS Account]
-         │ (aws-sdk-go-v2)
-         ▼
-[Go Scanner Engine] ────(gRPC / JSON Stream)────► [Python AI Agent Orchestrator]
-                                                            │
-                                  ┌─────────────────────────┴────────────────────────┐
-                                  ▼                                                  ▼
-                     [topology.excalidraw]                               [architecture.drawio]
-                    (Excalidraw / VS Code)                             (Draw.io / diagrams.net)
-```
+These sub-documents break down the complex computer science, graph theory, and security concepts behind Picasso:
 
-- **Golang (`picasso-scanner`)**: High-throughput asynchronous AWS API crawling with goroutines and low memory consumption, rate-limit avoidance, and streaming normalized cloud topology graphs.
-- **Python (`picasso-agent-core`)**: LLM orchestration (LangGraph, Gemini API), complex IAM privilege escalation graph traversal (NetworkX), security reasoning, and generation of `.excalidraw` and `.drawio` files + Terraform diffs.
+- 🔑 [**01 - IAM Privilege Escalation & Graph Theory**](./docs/deep_dives/01_iam_privilege_escalation_and_graph_theory.md): The 6-layer AWS policy evaluation model, Rhino Security Labs escalation vectors, and using **Dijkstra/BFS** to mathematically prove attack paths.
+- 🌐 [**02 - Network Reachability & Firewall Matrices**](./docs/deep_dives/02_network_reachability_and_firewall_matrices.md): Stateful Security Groups vs. Stateless NACLs, route table propagation, and Boolean constraint solving for internet exposure.
+- ☸️ [**03 - Running LocalStack on Local Kubernetes**](./docs/deep_dives/03_localstack_on_kubernetes.md): Zero-cloud development architecture using `Kind`/`Minikube`, Kubernetes manifests, and Terraform seeding.
+- 🤖 [**04 - The Deterministic + AI Hybrid Pattern**](./docs/deep_dives/04_deterministic_ai_hybrid_pattern.md): Why pure LLM scanners fail (hallucinations, context explosion) and how deterministic graph engines pair with LLM agents.
+- 📊 [**05 - Enterprise Security Standards (SARIF, ASFF & MITRE)**](./docs/deep_dives/05_enterprise_reporting_sarif_asff_mitre.md): Emitting SARIF for GitHub Security tab, ASFF for AWS Security Hub, and taxonomy mapping to MITRE ATT&CK for Cloud.
 
 ---
 
-## 🔍 Core Security Pillars
+## 🏗 Polyglot Engine Architecture
 
-1. **Control Plane & Governance**: Evaluates AWS Organizations, SCP enforcement, multi-region CloudTrail immutability, and GuardDuty detection.
-2. **VPC & Network Segmentation**: Analyzes public vs. private subnets, NAT gateways, route tables, and cross-environment VPC peering bleed.
-3. **Firewalls & Perimeter**: Flags unrestricted Security Group ingress (`0.0.0.0/0` on sensitive ports), default SG usage, and WAF associations.
-4. **IAM Risks & Blast Radius**: Discovers privilege escalation chains (e.g., `iam:PassRole`, policy tampering), wildcard policies, and cross-account trust boundaries.
+```
+[LocalStack on Kubernetes (Pod: 4566)]
+                  │ (aws-sdk-go-v2 via custom endpoint resolver)
+                  ▼
+[Go Scanner CLI: Worker Pools + Goroutines]
+                  │ (Normalized Graph JSON Stream)
+                  ▼
+[Deterministic Graph Solver (NetworkX / BFS)] ──► Proven Attack Paths
+                  │
+                  ▼
+[Python AI Reasoning Agent (Gemini / LangGraph)]
+                  │
+  ┌───────────────┼───────────────┬────────────────┐
+  ▼               ▼               ▼                ▼
+[topology.      [architecture.  [picasso.        [remediations.
+ excalidraw]     drawio]         sarif]           tf]
+```
